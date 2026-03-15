@@ -9,48 +9,27 @@ const PLAYER_COLORS = [
   { bg: "#1a4a4a", accent: "#14b8a6", name: "Teal" },
 ];
 
-// MTG color identity → display colors
-const MTG_COLORS = {
-  W: { bg: "#3d3520", accent: "#e6d088", name: "White" },
-  U: { bg: "#1a2a5c", accent: "#4d9de0", name: "Blue" },
-  B: { bg: "#2a1a2e", accent: "#a67bb5", name: "Black" },
-  R: { bg: "#5c1a1a", accent: "#e04d4d", name: "Red" },
-  G: { bg: "#1a3d1a", accent: "#4dbb5f", name: "Green" },
-};
-
-// Blend multiple MTG colors into one accent
-function getMtgAccent(colorIdentity) {
-  if (!colorIdentity || colorIdentity.length === 0) return null;
-  if (colorIdentity.length === 1) {
-    const c = MTG_COLORS[colorIdentity[0]];
-    return c || null;
-  }
-  // Multi-color: average the RGB values
-  const hexToRgb = (hex) => {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return [r, g, b];
-  };
-  const rgbToHex = (r, g, b) =>
-    "#" + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
-
-  const accents = colorIdentity.map(c => MTG_COLORS[c]?.accent).filter(Boolean);
-  const bgs = colorIdentity.map(c => MTG_COLORS[c]?.bg).filter(Boolean);
-  if (accents.length === 0) return null;
-
-  const avgColor = (hexArr) => {
-    const rgbs = hexArr.map(hexToRgb);
-    const avg = [0, 1, 2].map(i => rgbs.reduce((s, c) => s + c[i], 0) / rgbs.length);
-    return rgbToHex(avg[0], avg[1], avg[2]);
-  };
-
-  return {
-    bg: avgColor(bgs),
-    accent: avgColor(accents),
-    name: colorIdentity.join(""),
-  };
-}
+// Full color palette for player selection
+const COLOR_PALETTE = [
+  // Row 1: MTG-inspired
+  { bg: "#3d3520", accent: "#e6d088", name: "White" },
+  { bg: "#1a2a5c", accent: "#4d9de0", name: "Blue" },
+  { bg: "#0a0a0a", accent: "#888888", name: "Black" },
+  { bg: "#5c1a1a", accent: "#e04d4d", name: "Red" },
+  { bg: "#1a3d1a", accent: "#4dbb5f", name: "Green" },
+  // Row 2: Extended
+  { bg: "#1a3a5c", accent: "#3b82f6", name: "Sapphire" },
+  { bg: "#4a1a5c", accent: "#a855f7", name: "Amethyst" },
+  { bg: "#5c4a1a", accent: "#eab308", name: "Gold" },
+  { bg: "#1a4a4a", accent: "#14b8a6", name: "Teal" },
+  { bg: "#5c1a3a", accent: "#ec4899", name: "Pink" },
+  // Row 3: More options
+  { bg: "#4a3a1a", accent: "#f97316", name: "Orange" },
+  { bg: "#2a2a2a", accent: "#999999", name: "Gray" },
+  { bg: "#1a1a3d", accent: "#6366f1", name: "Indigo" },
+  { bg: "#3d1a1a", accent: "#b91c1c", name: "Maroon" },
+  { bg: "#1a3d3d", accent: "#06b6d4", name: "Cyan" },
+];
 
 const DEFAULT_LIFE = 40;
 const COMMIT_DELAY = 1500; // ms before delta commits to history
@@ -505,7 +484,7 @@ function CommanderDamagePanel({ player, allPlayers, onDamageChange }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4vw", justifyContent: "center" }}>
         {opponents.map((opp) => {
           const dmg = player.commanderDamage[opp.index] || 0;
-          const oppColor = getMtgAccent(opp.colorIdentity) || PLAYER_COLORS[opp.index];
+          const oppColor = opp.customColor || PLAYER_COLORS[opp.index];
           return (
             <div key={opp.index} style={{
               display: "flex", alignItems: "center", gap: "0.3vw",
@@ -513,9 +492,10 @@ function CommanderDamagePanel({ player, allPlayers, onDamageChange }) {
               border: `1px solid ${oppColor.accent}33`,
             }}>
               <div style={{
-                width: "clamp(6px, 0.6vw, 12px)", height: "clamp(6px, 0.6vw, 12px)",
+                width: "clamp(8px, 0.8vw, 14px)", height: "clamp(8px, 0.8vw, 14px)",
                 borderRadius: "50%",
-                background: oppColor.accent, flexShrink: 0,
+                background: oppColor.accent,
+                flexShrink: 0,
               }} />
               <span style={{
                 fontSize: "clamp(9px, 0.9vw, 15px)", color: "rgba(255,255,255,0.6)",
@@ -535,10 +515,78 @@ function CommanderDamagePanel({ player, allPlayers, onDamageChange }) {
   );
 }
 
+function ColorPicker({ currentColor, playerNumber, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
+      {/* Player number badge — click to open palette */}
+      <div
+        onClick={() => setOpen(!open)}
+        style={{
+          width: "clamp(24px, 2.5vw, 40px)", height: "clamp(24px, 2.5vw, 40px)",
+          borderRadius: "50%",
+          background: currentColor.accent,
+          display: "flex", alignItems: "center",
+          justifyContent: "center", fontWeight: "bold",
+          fontSize: "clamp(12px, 1.3vw, 22px)",
+          color: "#fff", fontFamily: "'Cinzel', serif",
+          boxShadow: `0 0 12px ${currentColor.accent}66`,
+          cursor: "pointer",
+          transition: "transform 0.15s ease",
+          transform: open ? "scale(1.1)" : "scale(1)",
+        }}
+      >{playerNumber}</div>
+
+      {/* Color palette dropdown */}
+      {open && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0,
+          background: "rgba(15,15,30,0.95)", border: "1px solid rgba(255,255,255,0.15)",
+          borderRadius: "10px", padding: "0.6vh 0.6vw",
+          marginTop: "6px", zIndex: 60,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
+          backdropFilter: "blur(10px)",
+          display: "grid",
+          gridTemplateColumns: "repeat(5, 1fr)",
+          gap: "6px",
+        }}>
+          {COLOR_PALETTE.map((c, i) => (
+            <div
+              key={i}
+              onClick={() => { onSelect(c); setOpen(false); }}
+              style={{
+                width: "clamp(20px, 2vw, 32px)",
+                height: "clamp(20px, 2vw, 32px)",
+                borderRadius: "50%",
+                background: c.accent,
+                cursor: "pointer",
+                border: c.accent === currentColor.accent ? "2.5px solid #fff" : "2px solid rgba(255,255,255,0.1)",
+                boxShadow: c.accent === currentColor.accent ? `0 0 10px ${c.accent}` : "none",
+                transition: "all 0.15s ease",
+              }}
+              title={c.name}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PlayerPanel({ player, allPlayers, onUpdate, onDamageChange, onCommitDelta }) {
   const defaultColor = PLAYER_COLORS[player.index];
-  const mtgColor = getMtgAccent(player.colorIdentity);
-  const color = mtgColor || defaultColor;
+  const color = player.customColor || defaultColor;
   const hasArt = !!player.commanderArt;
 
   const { delta, visible, fading, addDelta } = useLifeDelta((committedDelta) => {
@@ -601,15 +649,11 @@ function PlayerPanel({ player, allPlayers, onUpdate, onDamageChange, onCommitDel
         <div style={{
           display: "flex", alignItems: "center", gap: "0.5vw", marginBottom: "0.8vh",
         }}>
-          <div style={{
-            width: "clamp(24px, 2.5vw, 40px)", height: "clamp(24px, 2.5vw, 40px)",
-            borderRadius: "50%",
-            background: color.accent, display: "flex", alignItems: "center",
-            justifyContent: "center", fontWeight: "bold",
-            fontSize: "clamp(12px, 1.3vw, 22px)",
-            color: "#fff", fontFamily: "'Cinzel', serif", flexShrink: 0,
-            boxShadow: `0 0 12px ${color.accent}66`,
-          }}>{player.index + 1}</div>
+          <ColorPicker
+            currentColor={color}
+            playerNumber={player.index + 1}
+            onSelect={(c) => onUpdate({ customColor: c })}
+          />
           <div style={{ flex: 1, minWidth: 0 }}>
             <input
               type="text"
@@ -631,7 +675,7 @@ function PlayerPanel({ player, allPlayers, onUpdate, onDamageChange, onCommitDel
           playerIndex={player.index}
           commanderName={player.commanderName}
           accentColor={color.accent}
-          onSelect={({ name, art, colorIdentity }) => onUpdate({ commanderName: name, commanderArt: art, colorIdentity })}
+          onSelect={({ name, art }) => onUpdate({ commanderName: name, commanderArt: art })}
         />
 
         {/* Life Total with Delta Display */}
@@ -801,7 +845,7 @@ export default function App() {
       energy: 0,
       commanderName: "",
       commanderArt: null,
-      colorIdentity: [],
+      customColor: null,
       commanderDamage: {},
       lifeHistory: [],
     }));
