@@ -9,6 +9,49 @@ const PLAYER_COLORS = [
   { bg: "#1a4a4a", accent: "#14b8a6", name: "Teal" },
 ];
 
+// MTG color identity → display colors
+const MTG_COLORS = {
+  W: { bg: "#3d3520", accent: "#e6d088", name: "White" },
+  U: { bg: "#1a2a5c", accent: "#4d9de0", name: "Blue" },
+  B: { bg: "#2a1a2e", accent: "#a67bb5", name: "Black" },
+  R: { bg: "#5c1a1a", accent: "#e04d4d", name: "Red" },
+  G: { bg: "#1a3d1a", accent: "#4dbb5f", name: "Green" },
+};
+
+// Blend multiple MTG colors into one accent
+function getMtgAccent(colorIdentity) {
+  if (!colorIdentity || colorIdentity.length === 0) return null;
+  if (colorIdentity.length === 1) {
+    const c = MTG_COLORS[colorIdentity[0]];
+    return c || null;
+  }
+  // Multi-color: average the RGB values
+  const hexToRgb = (hex) => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return [r, g, b];
+  };
+  const rgbToHex = (r, g, b) =>
+    "#" + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
+
+  const accents = colorIdentity.map(c => MTG_COLORS[c]?.accent).filter(Boolean);
+  const bgs = colorIdentity.map(c => MTG_COLORS[c]?.bg).filter(Boolean);
+  if (accents.length === 0) return null;
+
+  const avgColor = (hexArr) => {
+    const rgbs = hexArr.map(hexToRgb);
+    const avg = [0, 1, 2].map(i => rgbs.reduce((s, c) => s + c[i], 0) / rgbs.length);
+    return rgbToHex(avg[0], avg[1], avg[2]);
+  };
+
+  return {
+    bg: avgColor(bgs),
+    accent: avgColor(accents),
+    name: colorIdentity.join(""),
+  };
+}
+
 const DEFAULT_LIFE = 40;
 const COMMIT_DELAY = 1500; // ms before delta commits to history
 
@@ -292,9 +335,10 @@ function CommanderSearch({ onSelect, playerIndex, commanderName, accentColor }) 
       const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
       const card = await res.json();
       const artUrl = card.image_uris?.art_crop || card.card_faces?.[0]?.image_uris?.art_crop || null;
-      onSelect({ name: card.name, art: artUrl });
+      const colorIdentity = card.color_identity || [];
+      onSelect({ name: card.name, art: artUrl, colorIdentity });
     } catch {
-      onSelect({ name, art: null });
+      onSelect({ name, art: null, colorIdentity: [] });
     }
   };
 
@@ -461,16 +505,17 @@ function CommanderDamagePanel({ player, allPlayers, onDamageChange }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4vw", justifyContent: "center" }}>
         {opponents.map((opp) => {
           const dmg = player.commanderDamage[opp.index] || 0;
+          const oppColor = getMtgAccent(opp.colorIdentity) || PLAYER_COLORS[opp.index];
           return (
             <div key={opp.index} style={{
               display: "flex", alignItems: "center", gap: "0.3vw",
               background: "rgba(0,0,0,0.3)", borderRadius: "6px", padding: "0.3vh 0.5vw",
-              border: `1px solid ${PLAYER_COLORS[opp.index].accent}33`,
+              border: `1px solid ${oppColor.accent}33`,
             }}>
               <div style={{
                 width: "clamp(6px, 0.6vw, 12px)", height: "clamp(6px, 0.6vw, 12px)",
                 borderRadius: "50%",
-                background: PLAYER_COLORS[opp.index].accent, flexShrink: 0,
+                background: oppColor.accent, flexShrink: 0,
               }} />
               <span style={{
                 fontSize: "clamp(9px, 0.9vw, 15px)", color: "rgba(255,255,255,0.6)",
@@ -480,7 +525,7 @@ function CommanderDamagePanel({ player, allPlayers, onDamageChange }) {
               <StatCounter
                 label="" value={dmg} min={0} small
                 onChange={(v) => onDamageChange(opp.index, v)}
-                color={PLAYER_COLORS[opp.index].accent}
+                color={oppColor.accent}
               />
             </div>
           );
@@ -491,7 +536,9 @@ function CommanderDamagePanel({ player, allPlayers, onDamageChange }) {
 }
 
 function PlayerPanel({ player, allPlayers, onUpdate, onDamageChange, onCommitDelta }) {
-  const color = PLAYER_COLORS[player.index];
+  const defaultColor = PLAYER_COLORS[player.index];
+  const mtgColor = getMtgAccent(player.colorIdentity);
+  const color = mtgColor || defaultColor;
   const hasArt = !!player.commanderArt;
 
   const { delta, visible, fading, addDelta } = useLifeDelta((committedDelta) => {
@@ -584,7 +631,7 @@ function PlayerPanel({ player, allPlayers, onUpdate, onDamageChange, onCommitDel
           playerIndex={player.index}
           commanderName={player.commanderName}
           accentColor={color.accent}
-          onSelect={({ name, art }) => onUpdate({ commanderName: name, commanderArt: art })}
+          onSelect={({ name, art, colorIdentity }) => onUpdate({ commanderName: name, commanderArt: art, colorIdentity })}
         />
 
         {/* Life Total with Delta Display */}
@@ -754,6 +801,7 @@ export default function App() {
       energy: 0,
       commanderName: "",
       commanderArt: null,
+      colorIdentity: [],
       commanderDamage: {},
       lifeHistory: [],
     }));
