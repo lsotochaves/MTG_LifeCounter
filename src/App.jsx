@@ -637,8 +637,9 @@ function PlayerPanel({ player, allPlayers, onUpdate, onDamageChange, onCommitDel
       }} />
 
       <div style={{
-        position: "relative", zIndex: 1, padding: "1.5vh 1.2vw",
+        position: "relative", zIndex: 1, padding: "clamp(8px, 1.5vh, 20px) clamp(8px, 1.2vw, 20px)",
         flex: 1, display: "flex", flexDirection: "column",
+        overflowY: "auto", overflowX: "hidden",
       }}>
         {/* History icon — top right corner */}
         <div style={{ position: "absolute", top: "1vh", right: "1vw", zIndex: 2 }}>
@@ -797,7 +798,46 @@ function SetupScreen({ onStart }) {
   );
 }
 
-function getGridStyle(count) {
+// Detect screen orientation and size for responsive layout
+function useScreenLayout() {
+  const [layout, setLayout] = useState(() => getLayout());
+
+  function getLayout() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const ratio = w / h;
+    return {
+      isPortrait: ratio < 0.9,
+      isSquarish: ratio >= 0.9 && ratio <= 1.3,
+      isLandscape: ratio > 1.3,
+      isSmall: w < 768,
+      isMedium: w >= 768 && w < 1200,
+      isLarge: w >= 1200,
+      width: w,
+      height: h,
+    };
+  }
+
+  useEffect(() => {
+    const handler = () => setLayout(getLayout());
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  return layout;
+}
+
+function getGridStyle(count, layout) {
+  const { isPortrait, isSmall } = layout;
+
+  // Portrait / phone: stack vertically or 2 columns max
+  if (isPortrait || isSmall) {
+    if (count <= 2) return { gridTemplateColumns: "1fr", gridTemplateRows: "repeat(2, 1fr)" };
+    if (count <= 4) return { gridTemplateColumns: "repeat(2, 1fr)", gridTemplateRows: `repeat(${Math.ceil(count / 2)}, 1fr)` };
+    return { gridTemplateColumns: "repeat(2, 1fr)", gridTemplateRows: `repeat(${Math.ceil(count / 2)}, 1fr)` };
+  }
+
+  // Landscape / desktop: wider layouts
   if (count <= 2) return { gridTemplateColumns: "repeat(2, 1fr)", gridTemplateRows: "1fr" };
   if (count === 3) return { gridTemplateColumns: "repeat(3, 1fr)", gridTemplateRows: "1fr" };
   if (count <= 4) return { gridTemplateColumns: "repeat(2, 1fr)", gridTemplateRows: "repeat(2, 1fr)" };
@@ -822,6 +862,7 @@ function loadState() {
 }
 
 export default function App() {
+  const layout = useScreenLayout();
   const [started, setStarted] = useState(() => {
     const saved = loadState();
     return saved ? saved.started : false;
@@ -950,7 +991,7 @@ export default function App() {
       {/* Player Grid */}
       <div style={{
         display: "grid",
-        ...getGridStyle(players.length),
+        ...getGridStyle(players.length, layout),
         gap: "2px",
         flex: 1,
         width: "100%",
