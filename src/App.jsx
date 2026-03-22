@@ -593,20 +593,28 @@ function PlayerPanel({ player, allPlayers, onUpdate, onDamageChange, onCommitDel
     onCommitDelta(committedDelta);
   });
 
+  // Use ref to always have current life value in rapid callbacks
+  const lifeRef = useRef(player.life);
+  lifeRef.current = player.life;
+
   // Wrap life changes to also track delta
-  const handleLifeChange = (newLife) => {
-    const change = newLife - player.life;
+  const handleLifeChange = useCallback((newLife) => {
+    const change = newLife - lifeRef.current;
     addDelta(change);
     onUpdate({ life: newLife });
-  };
+  }, [addDelta, onUpdate]);
+
+  // Use ref for commander damage to avoid stale closures
+  const cmdDmgRef = useRef(player.commanderDamage);
+  cmdDmgRef.current = player.commanderDamage;
 
   // Wrap commander damage to also track delta (life changes come through here too)
-  const handleDamageChange = (fromIndex, newDmgValue) => {
-    const oldDmg = player.commanderDamage[fromIndex] || 0;
+  const handleDamageChange = useCallback((fromIndex, newDmgValue) => {
+    const oldDmg = cmdDmgRef.current[fromIndex] || 0;
     const lifeDelta = -(newDmgValue - oldDmg); // damage up = life down
     addDelta(lifeDelta);
     onDamageChange(fromIndex, newDmgValue);
-  };
+  }, [addDelta, onDamageChange]);
 
   return (
     <div style={{
